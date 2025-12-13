@@ -232,12 +232,75 @@ class DirObj:
                 shutil.move(i, join(self.Path, basename(i)))
             for i in self.Dirs:
                 shutil.rmtree(i.Path)
-            
+
+#File filter classes
+class FileFilter(abc.ABC):
+	@abc.abstractmethod
+	def GetFiltered(self, files): pass
+	
+	@abc.abstractmethod
+	def PrintOut(self): pass
+
+class ExtensionFilter(FileFilter):
+	def __init__(self, ext):
+		self.Extension = ext
+	
+	def GetFiltered(self, files):
+		r = []
+		
+		for i in files:
+			if i.Extension == self.Extension:
+				r.append(i)
+		
+		return r
+	
+	def PrintOut(self):
+		return "Расширение " + self.Extension
+
+class NameIncludesFilter(FileFilter):
+	def __init__(self, word):
+		self.Word = word
+		self.FirstSymbol = word[0]
+		self.Len = len(word)
+	
+	def GetFiltered(self, files):
+		r = []
+		
+		for i in files:
+			NameLen = len(i.Name)
+			for j in range(0, NameLen):
+				if NameLen - j < self.Len:
+					break
+				if i.Name[j] == self.FirstSymbol:
+					if i.Name[j:j+self.Len-1] == self.Word:
+						r.append(i)
+						break
+		
+		return r
+	
+	def PrintOut(self):
+		return "Имя содержит " + self.Word
+
+class SizeFilter(FileFilter):
+	def __init__(self, compareMode, size, sizeMeasure):
+		self.Comparison = compareMode
+		self.Size = ToBytes(size, sizeMeasure)
+	
+	def GetFiltered(self, files):
+		r = []
+		
+		for i in files:
+			if ComparisonOperators[self.Comparison](i.ByteSize, self.Size):
+				r.append(i)
+		
+		return r
+	
+	def PrintOut(self):
+		return "Размер {} чем {}".format(ComparisonName[self.Comparison], ToGreatestMeasure(self.Size))
 
 ###FUNCTIONS
 #Backend stuff
 #Names of inserts must be added here and their values must be added to GetVar method
-ValidInserts = ["num", "name", "ext", "day", "month", "year", "bytes", "kb", "mb", "gb", "tb", "gsize", "gsizename"]
 def TryParseName(formula):
     nameTokens = []
     currentText = ""
@@ -272,7 +335,7 @@ def TryParseName(formula):
         return False
     return nameTokens
 
-SizeMeasures = ["bytes", "KB", "MB", "GB", "TB"]
+
 def ToBytes(size, measure):
     if measure in SizeMeasures:
         count = SizeMeasures.index(measure)
@@ -397,6 +460,29 @@ Window.geometry("500x500")
 
 
 ###VARIABLES
+#Constant
+"""
+0 - >
+1 - <
+2 - >=
+3 - <=
+4 - ==
+5 - !=
+"""
+ComparisonOperators = {
+	0 : operator.gt,
+	1 : operator.lt,
+	2 : operator.ge,
+	3 : operator.le,
+	4 : operator.eq,
+	5 : operator.ne
+}
+ComparisonName = {0 : "больше", 1 : "меньше", 2 : "больше или равен", 3 : "меньше или равен", 4 : "равен", 5 : "не равен"}
+
+ValidInserts = ["num", "name", "ext", "day", "month", "year", "bytes", "kb", "mb", "gb", "tb", "gsize", "gsizename"]
+
+SizeMeasures = ["bytes", "KB", "MB", "GB", "TB"]
+
 
 #Settings values
 #Actions that must be done

@@ -1,8 +1,15 @@
+#Convenient stuff
+from enum import Enum
+import abc
+import operator
+#Work with files
 import os
 from os.path import *
 import shutil
 import zipfile
+#Work with files
 from datetime import datetime
+#GUI
 from tkinter import *
 from tkinter import ttk
 from tkinter import filedialog
@@ -12,90 +19,81 @@ from tkinter import filedialog
 ###CLASSES
 #File class
 class FileObj:
-    def __init__(self, Path):
-        if isfile(Path):
-            self.UpdateData(Path)
+    def __init__(self, path):
+        if isfile(path):
+            self.UpdateData(path)
         else:
             return None
 
-    def UpdateData(self, Path):
-        NameAndExt = splitext(basename(Path))
+    def UpdateData(self, path):
+        NameAndExt = splitext(basename(path))
         self.Name = NameAndExt[0]
         self.Extension = NameAndExt[1]
+
+        self.MDate = os.path.getmtime(path)
         
-        StrDate = datetime.fromtimestamp(os.path.getmtime(Path)).strftime("%d/%m/%Y").split("/")
-        self.Day = StrDate[0]
-        self.Month = StrDate[1]
-        self.Year = StrDate[2]
+        self.ByteSize = os.path.getsize(path)
+        
+    def Day(self):
+        return datetime.fromtimestamp(self.MDate).strftime("%d")
+    def Month(self):
+        return datetime.fromtimestamp(self.MDate).strftime("%m")
+    def Year(self):
+        return datetime.fromtimestamp(self.MDate).strftime("%Y")
     
-    def GetVariable(self, Var):
-        if Var == "name":
-            return self.Name
-        elif Var == "ext":
-            return self.Extension
-        elif Var == "day":
-            return self.Day
-        elif Var == "month":
-            return self.Month
-        elif Var == "year":
-            return self.Year
-        elif Var == "num":
-            return self.Number
+    def GetVar(self, var):
+        #["num", "name", "ext", "day", "month", "year", "bytes", "kb", "mb", "gb", "tb", "gsize", "gsizename"]
+        getVar = [
+            lambda: self.Number,
+            lambda: self.Name,
+            lambda: self.Extension,
+            lambda: self.Day(),
+            lambda: self.Month(),
+            lambda: self.Year(),
+            lambda: self.ByteSize,
+            lambda: FromBytesTo(self.ByteSize, "KB"),
+            lambda: FromBytesTo(self.ByteSize, "MB"),
+            lambda: FromBytesTo(self.ByteSize, "GB"),
+            lambda: FromBytesTo(self.ByteSize, "TB"),
+            lambda: ToGreatestMeasure(self.ByteSize)[0],
+            lambda: ToGreatestMeasure(self.ByteSize)[1]
+        ]
+
+        if var in ValidInserts:
+            return getVar[var]
         else:
             return False
     
-    def Rename(self, Path, NameFormula):
-        #Parsing
-        NewName = ""
-        CurrentInsert = ""
-        ParsingInsert = False
-        for i in NameFormula:
-            #print(i)
-            if i == "<":
-                if ParsingInsert:
-                    return False
-                else:
-                    ParsingInsert = True
-            elif i == ">":
-                if not ParsingInsert:
-                    return False
-                else:
-                    ParsingInsert = False
-                    Var = self.GetVariable(CurrentInsert)
-                    #print(CurrentInsert)
-                    #print(Var)
-                    if Var == False:
-                        return False
-                    else:
-                        NewName += str(Var)
-                        CurrentInsert = ""
-            else:
-                if ParsingInsert:
-                    CurrentInsert += i
-                else:
-                    NewName += i
-            #print(NewName, CurrentInsert)
+    def NameFromTokens(self, tokens):
+        name = ""
+        for i in tokens:
+            if type(i) == str:
+                name += i
+            if type(i) == int:
+                name += self.GetVar(i)
+        return name
 
-        if ParsingInsert:
-            #print("AAAAAAAAAAAAAAAAAAAAA")
-            return False
+    def Rename(self, path, tokens):
+        newName = self.NameFromTokens(tokens)
+        if newName == self.Name + self.Extension:
+            return True
 
-        if isfile(join(Path, NewName)):
-            NNS = splitext(NewName)
+        fullName = join(path, newName)
+        if isfile(fullName):
+            NNS = splitext(newName)
             i = 1
-            while isfile(join(Path, NNS[0] + "(" + str(i) + ")" + NNS[1])):
+            while isfile(join(path, NNS[0] + "(" + str(i) + ")" + NNS[1])):
                 i += 1
             NewName = NNS[0] + "(" + str(i) + ")" + NNS[1]
 
         #Renaming file
         try:
-            os.rename(join(Path, self.Name + self.Extension),join(Path, NewName))
+            os.rename(join(path, self.Name + self.Extension), fullName)
             SetNewName = splitext(NewName)
             self.Name = SetNewName[0]
             self.Extension = SetNewName[1]
             
         except BaseException as e:
-            #print("e")
             return False
             
         return True
@@ -237,6 +235,75 @@ class DirObj:
             
 
 ###FUNCTIONS
+#Backend stuff
+#Names of inserts must be added here and their values must be added to GetVar method
+ValidInserts = ["num", "name", "ext", "day", "month", "year", "bytes", "kb", "mb", "gb", "tb", "gsize", "gsizename"]
+def TryParseName(formula):
+    nameTokens = []
+    currentText = ""
+    currentInsert = ""
+    ParsingInsert = False
+    for i in formula:
+        if i == "<":
+            if ParsingInsert:
+                return False
+            else:
+                nameTokens.append(currentText)
+                currentText = ""
+                ParsingInsert = True
+        elif i == ">":
+            if not ParsingInsert:
+                return False
+            else:
+                if not currentInsert in ValidInserts:
+                    return False
+                else:
+                    nameTokens.append(ValidInserts.index(currentInsert))
+                    currentInsert = ""
+                    ParsingInsert = False
+        else:
+            if ParsingInsert:
+                currentInsert += i
+            else:
+                currentText += i
+    nameTokens.append(currentText)
+
+    if ParsingInsert:
+        return False
+    return nameTokens
+
+SizeMeasures = ["bytes", "KB", "MB", "GB", "TB"]
+def ToBytes(size, measure):
+    if measure in SizeMeasures:
+        count = SizeMeasures.index(measure)
+        return int(size * 1024 ** count)
+    else:
+        return False
+
+def FromBytesTo(size, measure):
+    if measure in SizeMeasures:
+        count = SizeMeasures.index(measure)
+        return round((size / 1024 ** count), 3)
+    else:
+        return False
+
+def ToGreatestMeasure(bytes):
+	count = 0
+	current = bytes
+	next = bytes / 1024
+	
+	while next >= 1 and count < len(SizeMeasures):
+		count += 1
+		current = next
+		next = current / 1024
+	
+	if count >= len(SizeMeasures):
+		return "Too big!~"
+	else:
+		return [str(round(current, 3)), SizeMeasures[count]]
+
+
+#GUI stuff
 #For updating GUI when something is pressed
 def UpdateGUI():
     FlattenActCheck.pack_forget()
@@ -263,52 +330,15 @@ def UpdateGUI():
         FlatFull.pack(pady = 5)
     
     OutFull.pack(pady = 5)
-
 #Directory select function
 def DirSel():
     Path = filedialog.askdirectory(title = "Выбор папки", initialdir = "/")
     DirSelEntry.delete(0, END)
     DirSelEntry.insert(0, Path)
-
+#Write something in a bottom text
 def Output(Out):
     OutTxt.configure(text = Out)
 
-ValidInserts = ["name", "ext", "day", "month", "year", "num"]
-def IsValidInsert(Insert):
-    for i in ValidInserts:
-        if i == Insert:
-            return True
-    return False
-
-def IsValidName(NameFormula):
-    NewName = ""
-    CurrentInsert = ""
-    ParsingInsert = False
-    for i in NameFormula:
-        if i == "<":
-            if ParsingInsert:
-                return False
-            else:
-                ParsingInsert = True
-        elif i == ">":
-            if not ParsingInsert:
-                return False
-            else:
-                ParsingInsert = False
-                Var = IsValidInsert(CurrentInsert)
-                if Var == False:
-                    return False
-                else:
-                    CurrentInsert = ""
-        else:
-            if ParsingInsert:
-                CurrentInsert += i
-            else:
-                NewName += i
-
-    if ParsingInsert:
-        return False
-    return True
 
 #Full function
 def Execute():
@@ -332,7 +362,7 @@ def Execute():
     #Renaming
     NF = NameEntry.get()
     if MustRename.get():
-        if IsValidName(NF):
+        if TryParseName(NF) != False:
             DirObject.SortFiles(FileNumeration.get(), ReverseSort.get())
             DirObject.RenameFiles(NF)
         else:
@@ -389,10 +419,11 @@ MustArchive = BooleanVar(value = False)
 #Flattening settings
 FlattenBeforeOrAfter = BooleanVar(value = False)
 
+
+
 ###GUI
 WindowFrame = Frame(Window)
 WindowFrame.pack(padx = 10, pady = 5)
-
 
 #General settings
 GeneralFull = Frame(WindowFrame)

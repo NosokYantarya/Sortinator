@@ -258,6 +258,14 @@ class IFileFilter(abc.ABC):
 
 class NumberFilter(IFileFilter):
     def __init__(self, compareMode: Operators, num: int):
+        self.Serialised = {
+            "Type": "NumberFilter",
+            "Args": {
+                "CompareMode": compareMode,
+                "Number": num
+            }
+        }
+
         self.Comparison = compareMode
         self.Number = num
     
@@ -274,6 +282,13 @@ class NumberFilter(IFileFilter):
 
 class NameIncludesFilter(IFileFilter):
     def __init__(self, word: str):
+        self.Serialised = {
+            "Type": "NameIncludesFilter",
+            "Args": {
+                "Word": word
+            }
+        }
+
         self.Word = word
         self.FirstSymbol = word[0]
         self.Len = len(word)
@@ -298,6 +313,13 @@ class NameIncludesFilter(IFileFilter):
 
 class ExtensionFilter(IFileFilter):
     def __init__(self, ext: str):
+        self.Serialised = {
+            "Type": "ExtensionFilter",
+            "Args": {
+                "Extension": ext
+            }
+        }
+
         if not ext[0] == ".":
              ext = "." + ext
         self.Extension = ext
@@ -316,6 +338,16 @@ class ExtensionFilter(IFileFilter):
 
 class DateFilter(IFileFilter):
     def __init__(self, compareMode: Operators, day: int, month: int, year: int):
+        self.Serialised = {
+            "Type": "DateFilter",
+            "Args": {
+                "CompareMode": compareMode,
+                "Day": day,
+                "Month": month,
+                "Year": year
+            }
+        }
+
         self.Comparison = compareMode
         self.DatetimeObj = datetime.datetime(year, month, day)
     
@@ -332,6 +364,15 @@ class DateFilter(IFileFilter):
 
 class SizeFilter(IFileFilter):
     def __init__(self, compareMode: Operators, size, sizeMeasure: SizeMeasures):
+        self.Serialised = {
+            "Type": "SizeFilter",
+            "Args": {
+                "CompareMode": compareMode,
+                "SizeNumber": size,
+                "SizeUnit": MeasuresNames[sizeMeasure]
+            }
+        }
+
         self.Comparison = compareMode
         self.Size = ToBytes(size, sizeMeasure)
 
@@ -359,6 +400,13 @@ class SizeFilter(IFileFilter):
 
 class NotFilter(IFileFilter):
     def __init__(self, filter: IFileFilter):
+        self.Serialised = {
+            "Type": "NotFilter",
+            "Args": {
+                "Filter": filter.Serialised
+            }
+        }
+
         self.Filter = filter
     
     def MustInclude(self, properties: FileProperties) -> bool:
@@ -374,6 +422,29 @@ class NotFilter(IFileFilter):
         
         return r
 
+def DeserialiseFilter(serialised: dict):
+    type = serialised["Type"]
+    if "Args" in serialised:
+        args = list(serialised["Args"].values())
+        
+    try:
+        if type == "NumberFilter":
+            return NumberFilter(*args)
+        if type == "NameIncludesFilter":
+            return NameIncludesFilter(*args)
+        if type == "ExtensionFilter":
+            return ExtensionFilter(*args)
+        if type == "DateFilter":
+            return DateFilter(*args)
+        if type == "SizeFilter":
+            return SizeFilter(*args)
+        if type == "NotFilter":
+            fltr = DeserialiseFilter(args[0])
+            return NotFilter(fltr)
+    except:
+        raise ValueError("Invalid filter arguments")
+    raise ValueError("Invalid filter type")
+
 #File grouping classes
 class IFileGrouper(abc.ABC):
      @abc.abstractmethod
@@ -383,6 +454,13 @@ class IFileGrouper(abc.ABC):
 
 class NumberGrouper(IFileGrouper):
     def __init__(self, range: int):
+        self.Serialised = {
+            "Type": "NumberGrouper",
+            "Args": {
+                "Range": range
+            }
+        }
+
         self.Range = range
     
     def GetDirName(self, properties: FileProperties) -> str:
@@ -401,7 +479,9 @@ class NumberGrouper(IFileGrouper):
 
 class ExtensionGrouper(IFileGrouper):
      def __init__(self):
-          pass
+          self.Serialised = {
+            "Type": "ExtensionGrouper"
+        }
      
      def GetDirName(self, properties: FileProperties) -> str:
           return properties.ByIndex(2)
@@ -414,6 +494,13 @@ class ExtensionGrouper(IFileGrouper):
 
 class DateGrouper(IFileGrouper):
      def __init__(self, dateAccuracy: DateElements):
+          self.Serialised = {
+            "Type": "DateGrouper",
+            "Args": {
+                "Accuracy": dateAccuracy
+            }
+        }
+
           self.Accuracy = dateAccuracy
     
      def GetDirName(self, properties: FileProperties) -> str:
@@ -434,6 +521,14 @@ class DateGrouper(IFileGrouper):
 
 class SizeGrouper(IFileGrouper):
      def __init__(self, size: int, measure: str):
+          self.Serialised = {
+            "Type": "Sizegrouper",
+            "Args": {
+                "SizeNumber": size,
+                "SizeUnit": MeasuresNames[measure]
+            }
+        }
+
           self.Size = size
           self.Measure = measure
           
@@ -458,6 +553,24 @@ class SizeGrouper(IFileGrouper):
          if lang == Languages.RU:
              r = f"по размеру, в диапазоне {sizeText}"
          return r
+
+def DeserialiseGrouper(serialised: dict):
+    type = serialised["Type"]
+    if "Args" in serialised:
+        args = list(serialised["Args"].values())
+
+    try:
+        if type == "NumberGrouper":
+            return NumberGrouper(*args)
+        if type == "ExtensionGrouper":
+            return ExtensionGrouper()
+        if type == "DateGrouper":
+            return DateGrouper(*args)
+        if type == "SizeGrouper":
+            return SizeGrouper(args[0], MeasuresNames.index(args[1]))
+    except:
+        raise ValueError("Invalid grouper arguments")
+    raise ValueError("Invalid grouper type")
 
 #Directory class
 class DirObj:
@@ -599,6 +712,17 @@ class SortCommand(ICommand):
             prop.ByName(sortBy)
         except:
             raise ValueError("Invalid sort by parameter")
+        
+        self.Serialised = {
+            "Type": "SortCommand",
+            "Args": {
+                "SortBy": sortBy,
+                "ReversedSort": reversedSort,
+                "Filter": filter.Serialised,
+                "Children": children
+            }
+        }
+
         self.SortBy = sortBy
         self.Reverse = reversedSort
         self.Filter = filter
@@ -620,6 +744,15 @@ class RenameCommand(ICommand):
         tokens = TryParseName(nameFormula)
         if tokens == False:
             raise ValueError("Invalid name formula")
+        
+        self.Serialised = {
+            "Type": "RenameCommand",
+            "Args": {
+                "Formula": nameFormula,
+                "Children": children
+            }
+        }
+
         self.Formula = nameFormula
         self.Tokens = tokens
         self.Children = children
@@ -637,6 +770,15 @@ class RenameCommand(ICommand):
 
 class GroupCommand(ICommand):
     def __init__(self, grouper: IFileGrouper, mustArchive: bool = False, children: bool = True):
+        self.Serialised = {
+            "Type": "GroupCommand",
+            "Args": {
+                "Grouper": grouper.Serialised,
+                "MustArchive": mustArchive,
+                "Children": children
+            }
+        }
+
         self.Grouper = grouper
         self.MustArchive = mustArchive
         self.Children = children
@@ -654,7 +796,9 @@ class GroupCommand(ICommand):
 
 class FlattenCommand(ICommand):
     def __init__(self):
-        pass
+        self.Serialised = {
+            "Type": "FlattenCommand",
+        }
 
     def Execute(self, dirObj: DirObj):
         dirObj.Flatten()
@@ -666,3 +810,24 @@ class FlattenCommand(ICommand):
         if lang == Languages.RU:
             r = "Сгладить дерево"
         return r
+
+def DeserialiseCommand(serialised: dict):
+    type = serialised["Type"]
+    if "Args" in serialised:
+        args = list(serialised["Args"].values())
+
+    try:
+        if type == "SortCommand":
+            args[2] = DeserialiseFilter(args[2])
+            return SortCommand(*args)
+        if type == "RenameCommand":
+            return RenameCommand(*args)
+        if type == "GroupCommand":
+            args[0] = DeserialiseGrouper(args[0])
+            return GroupCommand(*args)
+        if type == "FlattenCommand":
+            return FlattenCommand()
+    except BaseException as e:
+        raise e
+        #raise ValueError("Invalid command arguments")
+    #raise ValueError("Invalid command type")

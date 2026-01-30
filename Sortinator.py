@@ -1,8 +1,11 @@
 import Filework
 import sys
+import json
 from PyQt6 import QtCore, QtWidgets, QtGui
 
 
+
+SaveDir = Filework.os.path.join(Filework.os.path.dirname(Filework.os.path.abspath(__file__)), "SavedPrograms")
 
 class DirectorySelect(QtWidgets.QWidget):
     def __init__(self, height: int, buttonWidth: int, parent = None):
@@ -69,9 +72,20 @@ class CommandsDisplay(QtWidgets.QScrollArea):
             self.Layout.removeWidget(commandWidget)
             commandWidget.deleteLater()
     
+    def ClearCommands(self):
+        keys = list(self.CommandWidgets.keys())
+        for i in keys:
+            self.RemoveCommand(i)
+
     def Execute(self, dirObj: Filework.DirObj):
         for i in self.CommandWidgets.values():
             i.Execute(dirObj)
+    
+    def GetSerialised(self):
+        lst = []
+        for i in self.CommandWidgets.values():
+            lst.append(i.CommandObj.Serialised)
+        return lst
 
 class CommandWidget(QtWidgets.QWidget):
     def __init__(self, command: Filework.ICommand, index: int, display: CommandsDisplay, parent = None):
@@ -438,6 +452,9 @@ class CommandsManager(QtWidgets.QWidget):
     def Execute(self, dirObj: Filework.DirObj):
         self.Display.Execute(dirObj)
         print("Finished")
+    
+    def GetSerialised(self):
+        return self.Display.GetSerialised()
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -469,7 +486,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.Layout1.addWidget(self.ExecButton)
 
         self.SaveButton = QtWidgets.QPushButton("Сохранить", self)
+        self.SaveButton.clicked.connect(self.Save)
         self.Layout1.addWidget(self.SaveButton)
+
+        self.LoadButton = QtWidgets.QPushButton("Загрузить", self)
+        self.LoadButton.clicked.connect(self.Load)
+        self.Layout1.addWidget(self.LoadButton)
     
     def Execute(self):
         try:
@@ -477,6 +499,50 @@ class MainWindow(QtWidgets.QMainWindow):
             self.Commands.Execute(dirObj)
         except ValueError as e:
             print(e.args[0])
+    
+    def Save(self):
+        if not Filework.os.path.isdir(SaveDir):
+            Filework.os.mkdir(SaveDir)
+        
+        filePath = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Save program",
+            SaveDir,
+            "JSON Files (*.json);;All Files (*)",
+            "JSON Files (*.json)"
+        )[0]
+
+        if not filePath.endswith(".json"):
+            filePath += ".json"
+
+        pyObj = self.Commands.GetSerialised()
+
+        with open(filePath, 'w') as file:
+            json.dump(pyObj, file, indent = 4)
+    
+    def Load(self):
+        filePath = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Load program",
+            SaveDir,
+            "JSON Files (*.json);;All Files (*)",
+            "JSON Files (*.json)"
+        )[0]
+
+        try:
+            with open(filePath, 'r') as file:
+                pyObj = json.load(file)
+
+                commandObjs = []
+                for i in pyObj:
+                    commandObjs.append(Filework.DeserialiseCommand(i))
+                
+                self.Commands.Display.ClearCommands()
+                for i in commandObjs:
+                    self.Commands.Display.AddCommand(i)
+        except BaseException as e:
+            print(e.args[0])
+
 
 
 App = QtWidgets.QApplication(sys.argv)

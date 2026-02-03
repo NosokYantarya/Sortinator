@@ -512,6 +512,9 @@ class MainWindow(QtWidgets.QMainWindow):
             "JSON Files (*.json)"
         )[0]
 
+        if filePath == "":
+            return False
+
         if not filePath.endswith(".json"):
             filePath += ".json"
 
@@ -519,6 +522,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         with open(filePath, 'w') as file:
             json.dump(pyObj, file, indent = 4)
+        
+        return True
     
     def Load(self):
         filePath = QtWidgets.QFileDialog.getOpenFileName(
@@ -528,6 +533,9 @@ class MainWindow(QtWidgets.QMainWindow):
             "JSON Files (*.json);;All Files (*)",
             "JSON Files (*.json)"
         )[0]
+
+        if filePath == "":
+            return False
 
         try:
             with open(filePath, 'r') as file:
@@ -542,6 +550,9 @@ class MainWindow(QtWidgets.QMainWindow):
                     self.Commands.Display.AddCommand(i)
         except BaseException as e:
             print(e.args[0])
+            return False
+        
+        return True
 
 
 
